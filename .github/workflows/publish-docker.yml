@@ -46,7 +46,7 @@ jobs:
         run: |
           branch=$(echo "${{ github.ref }}" | sed -e "s/refs\/heads\///g")
           tag=$(echo "${{ github.event.inputs.tag || '$branch' }}" | sed 's/\//-/g') # replace '/' with '-'
-          image_name=nethermindeth/${{ github.event.inputs.image-name || 'nethermind' }}
+          image_name=ghcr.io/${{ github.repository_owner }}/${{ github.event.inputs.image-name || 'nethermind' }}
           build_timestamp=$(date '+%s')
           
           echo "Building image with tag $tag"
