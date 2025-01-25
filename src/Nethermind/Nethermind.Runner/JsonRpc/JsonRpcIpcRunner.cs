@@ -58,7 +58,7 @@ namespace Nethermind.Runner.JsonRpc
             }
         }
 
-        private async Task StartServer(string path, CancellationToken cancellationToken) 
+        private async Task StartServer(string path, CancellationToken cancellationToken)
         {
            DeleteSocketFileIfExists(path);
         
@@ -66,41 +66,55 @@ namespace Nethermind.Runner.JsonRpc
            _server.Bind(new UnixDomainSocketEndPoint(path));
            _server.Listen(0);
         
-           while (true) {
-             try {
-               if (_logger.IsInfo) _logger.Info("Waiting for an IPC connection...");
+           while (true)
+           {
+               try
+               {
+                   if (_logger.IsInfo) _logger.Info("Waiting for an IPC connection...");
         
-               Socket socket = await _server.AcceptAsync(cancellationToken);
+                   Socket socket = await _server.AcceptAsync(cancellationToken);
         
-               socket.ReceiveTimeout = _jsonRpcConfig.Timeout;
-               socket.SendTimeout = _jsonRpcConfig.Timeout;
+                   socket.ReceiveTimeout = _jsonRpcConfig.Timeout;
+                   socket.SendTimeout = _jsonRpcConfig.Timeout;
         
-               using JsonRpcSocketsClient < IpcSocketMessageStream > ? socketsClient = new(
-                 string.Empty,
-                 new IpcSocketMessageStream(socket),
-                 RpcEndpoint.IPC,
-                 _jsonRpcProcessor,
-                 _jsonRpcLocalStats,
-                 _jsonSerializer,
-                 maxBatchResponseBodySize: _jsonRpcConfig.MaxBatchResponseBodySize);
+                   _ = Task.Run(async () =>
+                   {
+                       try
+                       {
+                           using JsonRpcSocketsClient<IpcSocketMessageStream>? socketsClient = new(
+                               string.Empty,
+                               new IpcSocketMessageStream(socket),
+                               RpcEndpoint.IPC,
+                               _jsonRpcProcessor,
+                               _jsonRpcLocalStats,
+                               _jsonSerializer,
+                               maxBatchResponseBodySize: _jsonRpcConfig.MaxBatchResponseBodySize);
         
-               await socketsClient.ReceiveLoopAsync();
-        
-             } catch (IOException ex) when(ex.InnerException is SocketException {
-               SocketErrorCode: SocketError.ConnectionReset
-             }) {
-               _logger.Debug("IPC client disconnected.");
-             }
-             catch (SocketException ex) when(ex.SocketErrorCode == SocketError.ConnectionReset || ex.ErrorCode == OperationCancelledError) {
-               _logger.Debug("IPC client disconnected.");
-             }
-             catch (SocketException ex) {
-               if (_logger.IsError) _logger.Error($"IPC server error {ex.ErrorCode}:", ex);
-             } catch (Exception ex) {
-               if (_logger.IsError) _logger.Error($"IPC server error:", ex);
-             }
+                           await socketsClient.ReceiveLoopAsync();
+                       }
+                       catch (IOException ex) when (ex.InnerException is SocketException { SocketErrorCode: SocketError.ConnectionReset })
+                       {
+                           _logger.Debug("IPC client disconnected.");
+                       }
+                       catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionReset || ex.ErrorCode == OperationCancelledError)
+                       {
+                           _logger.Debug("IPC client disconnected.");
+                       }
+                       catch (SocketException ex)
+                       {
+                           if (_logger.IsError) _logger.Error($"IPC server error {ex.ErrorCode}:", ex);
+                       }
+                       catch (Exception ex)
+                       {
+                           if (_logger.IsError) _logger.Error($"IPC server error:", ex);
+                       }
+                   });
+               }
+               catch (Exception ex)
+               {
+                   if (_logger.IsError) _logger.Error($"Server accept error:", ex);
+               }
            }
-           
         }
 
         private void DeleteSocketFileIfExists(string path)
