@@ -95,8 +95,8 @@ public static class BlockErrorMessages
     public static string HeaderGasUsedMismatch(long expected, long actual) =>
         $"HeaderGasUsedMismatch: Gas used in header does not match calculated. Expected {expected}, got {actual}";
 
-    public static readonly string BlobGasUsedAboveBlockLimit =
-        $"BlockBlobGasExceeded: A block cannot have more than {Eip4844Constants.MaxBlobGasPerBlock} blob gas.";
+    public static string BlobGasUsedAboveBlockLimit(ulong blobGas, int blobsCount, ulong blobsGasUsed) =>
+        $"BlockBlobGasExceeded: A block cannot have more than {blobGas} blob gas, blobs count {blobsCount}, blobs gas used: {blobsGasUsed}.";
 
     public static string IncorrectExcessBlobGas(ulong? expected, ulong? actual) =>
         $"HeaderExcessBlobGasMismatch: Excess blob gas in header does not match calculated. Expected {expected}, got {actual}";
@@ -123,7 +123,7 @@ public static class BlockErrorMessages
         "RequestsNotEnabled: Requests must be null in block when EIP-6110 and EIP-7002 are not activated.";
 
     public static string InvalidRequestsHash(Hash256? expected, Hash256? actual) =>
-        $"InvalidRequestsHash: Requests hash hash mismatch in block: expected {expected}, got {actual}";
+        $"InvalidRequestsHash: Requests hash mismatch in block: expected {expected}, got {actual}";
 
     public const string InvalidRequestsOrder =
         "InvalidRequestsOrder: Requests are not in the correct order in block.";

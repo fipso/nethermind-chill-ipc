@@ -36,9 +36,9 @@ public class GnosisSpecProvider : ISpecProvider
             < LondonBlockNumber => Berlin.Instance,
             _ => forkActivation.Timestamp switch
             {
-                null or < ShanghaiTimestamp => London.Instance,
-                < CancunTimestamp => Shanghai.Instance,
-                < PragueTimestamp => Cancun.Instance,
+                null or < ShanghaiTimestamp => LondonGnosis.Instance,
+                < CancunTimestamp => ShanghaiGnosis.Instance,
+                < PragueTimestamp => CancunGnosis.Instance,
                 _ => PragueGnosis.Instance
             }
         };

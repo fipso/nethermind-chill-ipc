@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Nethermind.Api;
+using Nethermind.Api.Steps;
 using Nethermind.Blockchain.Synchronization;
 using Nethermind.Core;
 using Nethermind.Db;
@@ -16,7 +17,7 @@ using Type = System.Type;
 
 namespace Nethermind.Init.Steps;
 
-[RunnerStepDependencies(typeof(StartMonitoring))]
+[RunnerStepDependencies(typeof(InitializeNetwork))]
 public class StartMonitoring : IStep
 {
     private readonly IApiWithNetwork _api;

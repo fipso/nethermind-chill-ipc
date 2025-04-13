@@ -4,7 +4,7 @@
     "ChainSpecPath": "chainspec/linea-mainnet.json",
     "GenesisHash": "0xb6762a65689107b2326364aefc18f94cda413209fab35c00d4af51eaa20ffbc6",
     "BaseDbPath": "nethermind_db/linea-mainnet",
-    "LogFileName": "linea-mainnet.logs.txt"
+    "LogFileName": "linea-mainnet.log"
   },
   "Merge": {
     "Enabled": false
@@ -17,9 +17,9 @@
   },
   "Sync": {
     "SnapSync": true,
-    "PivotNumber": 14740000,
-    "PivotHash": "0x0de554c609a9ef79d0b1c389701f156dfb71e6566551347ae35fe56f331afc4a",
-    "PivotTotalDifficulty": "29480001",
+    "PivotNumber": 17740000,
+    "PivotHash": "0x6af1cc1860c3958c44c14e7e8a455aeca1223bc976d418c1bb45b77f280915d8",
+    "PivotTotalDifficulty": "35480001",
     "HeaderStateDistance": 6
   },
   "JsonRpc": {

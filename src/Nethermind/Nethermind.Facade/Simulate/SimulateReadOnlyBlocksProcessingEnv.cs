@@ -29,8 +29,8 @@ public class SimulateBlockValidationTransactionsExecutor(
     UInt256? blobBaseFeeOverride)
     : BlockValidationTransactionsExecutor(transactionProcessor, stateProvider)
 {
-    protected override BlockExecutionContext CreateBlockExecutionContext(Block block) =>
-        blobBaseFeeOverride is not null ? new BlockExecutionContext(block.Header, blobBaseFeeOverride.Value) : base.CreateBlockExecutionContext(block);
+    protected override BlockExecutionContext CreateBlockExecutionContext(Block block, IReleaseSpec spec) =>
+        blobBaseFeeOverride is not null ? new BlockExecutionContext(block.Header, blobBaseFeeOverride.Value) : base.CreateBlockExecutionContext(block, spec);
 
     protected override void ProcessTransaction(in BlockExecutionContext blkCtx, Transaction currentTx, int index, BlockReceiptsTracer receiptsTracer, ProcessingOptions processingOptions)
     {
@@ -60,6 +60,7 @@ public class SimulateReadOnlyBlocksProcessingEnv : IDisposable
         IReadOnlyDbProvider readOnlyDbProvider,
         IBlockTree blockTree,
         ISpecProvider specProvider,
+        ISimulateTransactionProcessorFactory transactionProcessorFactory,
         ILogManager? logManager = null,
         bool validate = false)
     {
@@ -72,9 +73,9 @@ public class SimulateReadOnlyBlocksProcessingEnv : IDisposable
         SimulateBlockhashProvider blockhashProvider = new SimulateBlockhashProvider(new BlockhashProvider(BlockTree, specProvider, StateProvider, logManager), BlockTree);
         CodeInfoRepository = new OverridableCodeInfoRepository(new CodeInfoRepository());
         SimulateVirtualMachine virtualMachine = new SimulateVirtualMachine(new VirtualMachine(blockhashProvider, specProvider, CodeInfoRepository, logManager));
-        _transactionProcessor = new SimulateTransactionProcessor(SpecProvider, StateProvider, virtualMachine, CodeInfoRepository, _logManager, validate);
+        _transactionProcessor = transactionProcessorFactory.CreateTransactionProcessor(SpecProvider, StateProvider, virtualMachine, CodeInfoRepository, _logManager, validate);
         _blockValidator = CreateValidator();
-        BlockTransactionPicker = new BlockProductionTransactionPicker(specProvider, true);
+        BlockTransactionPicker = new BlockProductionTransactionPicker(specProvider, ignoreEip3607: true);
     }
 
     private IReadOnlyDbProvider DbProvider { get; }

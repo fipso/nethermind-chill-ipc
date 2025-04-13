@@ -98,7 +98,7 @@ namespace Nethermind.Evm.Benchmark
                 codeInfo: new CodeInfo(Bytecode),
                 value: 0,
                 transferValue: 0,
-                txExecutionContext: new TxExecutionContext(_header, Address.Zero, 0, null, codeInfoRepository),
+                txExecutionContext: new TxExecutionContext(new BlockExecutionContext(_header, _spec), Address.Zero, 0, null, codeInfoRepository),
                 inputData: default
             );
 
@@ -119,7 +119,7 @@ namespace Nethermind.Evm.Benchmark
             _stateProvider.Reset();
         }
 
-        [Benchmark(Baseline = true)]
+        [Benchmark]
         public void No_machine_running()
         {
             _stateProvider.Reset();
