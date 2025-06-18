@@ -7,6 +7,7 @@ using Nethermind.Consensus;
 using Nethermind.Consensus.AuRa;
 using Nethermind.Consensus.AuRa.Config;
 using Nethermind.Consensus.AuRa.InitializationSteps;
+using Nethermind.Consensus.ExecutionRequests;
 using Nethermind.Consensus.Processing;
 using Nethermind.Consensus.Transactions;
 using Nethermind.Core;
@@ -42,29 +43,19 @@ namespace Nethermind.Merge.AuRa.InitializationSteps
                 _api.SpecProvider!,
                 _api.BlockValidator!,
                 _api.RewardCalculatorSource!.Get(transactionProcessor),
-                new BlockProcessor.BlockValidationTransactionsExecutor(transactionProcessor, worldState),
+                new BlockProcessor.BlockValidationTransactionsExecutor(new ExecuteTransactionProcessorAdapter(transactionProcessor), worldState),
                 worldState,
                 _api.ReceiptStorage!,
                 new BeaconBlockRootHandler(transactionProcessor, worldState),
                 _api.LogManager,
                 _api.BlockTree!,
                 new AuraWithdrawalProcessor(withdrawalContractFactory.Create(transactionProcessor), _api.LogManager),
-                transactionProcessor,
+                new ExecutionRequestsProcessor(transactionProcessor),
                 CreateAuRaValidator(worldState, transactionProcessor),
                 txFilter,
                 GetGasLimitCalculator(),
                 contractRewriter,
-                preWarmer: preWarmer
-            );
-        }
-
-        protected override void InitSealEngine()
-        {
-            base.InitSealEngine();
-
-            if (_api.SealValidator is null) throw new StepDependencyException(nameof(_api.SealValidator));
-
-            _api.SealValidator = new Plugin.MergeSealValidator(_poSSwitcher!, _api.SealValidator!);
+                preWarmer: preWarmer);
         }
     }
 }
