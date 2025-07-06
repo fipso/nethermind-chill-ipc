@@ -3,9 +3,6 @@
 
 #nullable enable
 using Nethermind.Blockchain;
-using Nethermind.Blockchain.Filters;
-using Nethermind.Blockchain.FullPruning;
-using Nethermind.Blockchain.Services;
 using Nethermind.Config;
 using Nethermind.Consensus;
 using Nethermind.Consensus.Comparers;
@@ -40,8 +37,6 @@ namespace Nethermind.Api
         IBlockValidator BlockValidator { get; }
 
         IEnode? Enode { get; set; }
-        IFilterStore? FilterStore { get; set; }
-        IFilterManager? FilterManager { get; set; }
 
         [SkipServiceCollection]
         IUnclesValidator? UnclesValidator { get; }
@@ -60,7 +55,6 @@ namespace Nethermind.Api
         ITxSender? TxSender { get; set; }
         INonceManager? NonceManager { get; set; }
         ITxPool? TxPool { get; set; }
-        ITxPoolInfoProvider? TxPoolInfoProvider { get; set; }
         CompositeTxGossipPolicy TxGossipPolicy { get; }
         IRpcCapabilitiesProvider? RpcCapabilitiesProvider { get; set; }
         ITransactionComparerProvider? TransactionComparerProvider { get; set; }
@@ -77,14 +71,9 @@ namespace Nethermind.Api
         IBlockFinalizationManager? FinalizationManager { get; set; }
 
         IBlockProducerEnvFactory BlockProducerEnvFactory { get; }
-        IBlockImprovementContextFactory? BlockImprovementContextFactory { get; set; }
         IReadOnlyTxProcessingEnvFactory ReadOnlyTxProcessingEnvFactory { get; }
 
         IGasPriceOracle GasPriceOracle { get; }
-
-        [SkipServiceCollection]
-        IEthSyncingInfo? EthSyncingInfo { get; }
-
 
         IBlockProductionPolicy? BlockProductionPolicy { get; set; }
         BackgroundTaskScheduler BackgroundTaskScheduler { get; set; }

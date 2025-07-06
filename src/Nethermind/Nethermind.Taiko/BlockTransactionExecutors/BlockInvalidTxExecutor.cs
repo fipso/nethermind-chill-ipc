@@ -6,11 +6,10 @@ using System.Threading;
 using Nethermind.Consensus.Processing;
 using Nethermind.Core;
 using Nethermind.Core.Collections;
-using Nethermind.Core.Specs;
 using Nethermind.Evm;
+using Nethermind.Evm.State;
 using Nethermind.Evm.Tracing;
 using Nethermind.Evm.TransactionProcessing;
-using Nethermind.State;
 
 namespace Nethermind.Taiko.BlockTransactionExecutors;
 
@@ -20,7 +19,7 @@ public class BlockInvalidTxExecutor(ITransactionProcessorAdapter txProcessor, IW
     public void SetBlockExecutionContext(in BlockExecutionContext blockExecutionContext)
         => txProcessor.SetBlockExecutionContext(in blockExecutionContext);
 
-    public TxReceipt[] ProcessTransactions(Block block, ProcessingOptions processingOptions, BlockReceiptsTracer receiptsTracer, IReleaseSpec spec, CancellationToken token)
+    public TxReceipt[] ProcessTransactions(Block block, ProcessingOptions processingOptions, BlockReceiptsTracer receiptsTracer, CancellationToken token)
     {
         if (block.Transactions.Length == 0)
         {

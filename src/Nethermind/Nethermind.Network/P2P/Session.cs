@@ -410,7 +410,17 @@ namespace Nethermind.Network.P2P
                 State = SessionState.DisconnectingProtocols;
             }
 
-            if (_logger.IsDebug) _logger.Debug($"{this} initiating disconnect because {disconnectReason}, details: {details}");
+            if (_logger.IsDebug)
+            {
+                if (disconnectReason is DisconnectReason.InvalidNetworkId)
+                {
+                    if (_logger.IsTrace) _logger.Trace($"{this} initiating disconnect because {disconnectReason}, details: {details}");
+                }
+                else
+                {
+                    _logger.Debug($"{this} initiating disconnect because {disconnectReason}, details: {details}");
+                }
+            }
             //Trigger disconnect on each protocol handler (if p2p is initialized it will send disconnect message to the peer)
             if (!_protocols.IsEmpty)
             {
@@ -588,11 +598,13 @@ namespace Nethermind.Network.P2P
 
         private AdaptiveCodeResolver GetOrCreateResolver()
         {
-            string key = string.Join(":", _protocols.Select(static p => p.Key).OrderBy(static x => x).ToArray());
-            if (!_resolvers.TryGetValue(key, out AdaptiveCodeResolver? value))
+            string key = string.Join(":", _protocols.Select(static p => p.Value.Name).OrderBy(static x => x));
+            if (!_resolvers.TryGetValue(key, out AdaptiveCodeResolver value))
             {
-                value = new AdaptiveCodeResolver(_protocols);
-                _resolvers[key] = value;
+                value = _resolvers.AddOrUpdate(
+                    key,
+                    addValueFactory: (k) => new AdaptiveCodeResolver(_protocols),
+                    updateValueFactory: (k, v) => v);
             }
 
             return value;
@@ -659,7 +671,10 @@ namespace Nethermind.Network.P2P
                     offset += _alphabetically[j].SpaceSize;
                 }
 
-                throw new InvalidOperationException($"Registered protocols do not support {protocol}.{messageCode}");
+                throw new InvalidOperationException(
+                    $"Registered protocols do not support {protocol} with message code {messageCode}. " +
+                    $"Registered: {string.Join(";", _alphabetically)}."
+                );
             }
         }
 
