@@ -9,7 +9,6 @@ using Nethermind.Core.Crypto;
 using Nethermind.Core.Specs;
 using Nethermind.Core.Test.Builders;
 using Nethermind.Crypto;
-using Nethermind.Db;
 using Nethermind.Evm.Tracing;
 using Nethermind.Evm.TransactionProcessing;
 using Nethermind.Int256;
@@ -17,8 +16,8 @@ using Nethermind.Logging;
 using Nethermind.Specs;
 using Nethermind.Specs.Forks;
 using Nethermind.Evm.State;
-using Nethermind.Trie.Pruning;
 using FluentAssertions;
+using Nethermind.Blockchain;
 using Nethermind.Core.Test;
 using Nethermind.State;
 using NUnit.Framework;
@@ -152,7 +151,7 @@ public class EvmPooledMemoryTests : EvmMemoryTestsBase
         IWorldStateManager worldStateManager = TestWorldStateFactory.CreateForTest();
         IWorldState stateProvider = worldStateManager.GlobalWorldState;
         ISpecProvider specProvider = new TestSpecProvider(London.Instance);
-        CodeInfoRepository codeInfoRepository = new();
+        EthereumCodeInfoRepository codeInfoRepository = new();
         VirtualMachine virtualMachine = new(
             new TestBlockhashProvider(specProvider),
                 specProvider,
@@ -164,6 +163,8 @@ public class EvmPooledMemoryTests : EvmMemoryTestsBase
                 codeInfoRepository,
                 LimboLogs.Instance);
 
+        Hash256 stateRoot = null;
+        using var _ = stateProvider.BeginScope(IWorldState.PreGenesis);
         stateProvider.CreateAccount(to, 123);
         stateProvider.InsertCode(to, input, specProvider.GenesisSpec);
 
@@ -171,6 +172,7 @@ public class EvmPooledMemoryTests : EvmMemoryTestsBase
         stateProvider.Commit(specProvider.GenesisSpec);
 
         stateProvider.CommitTree(0);
+        stateRoot = stateProvider.StateRoot;
 
         Transaction tx = Build.A.Transaction.
             WithData(input).
@@ -187,6 +189,7 @@ public class EvmPooledMemoryTests : EvmMemoryTestsBase
             WithTransactions(tx).
             WithGasLimit(30000000).
             WithDifficulty(0).
+            WithStateRoot(stateRoot).
             TestObject;
         MyTracer tracer = new();
         transactionProcessor.Execute(

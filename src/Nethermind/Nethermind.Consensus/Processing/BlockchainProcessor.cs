@@ -11,6 +11,7 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 using Nethermind.Blockchain;
 using Nethermind.Blockchain.Find;
+using Nethermind.Blockchain.Tracing;
 using Nethermind.Core;
 using Nethermind.Core.Attributes;
 using Nethermind.Core.Collections;
@@ -18,8 +19,8 @@ using Nethermind.Core.Crypto;
 using Nethermind.Core.Extensions;
 using Nethermind.Core.Threading;
 using Nethermind.Evm.Tracing;
-using Nethermind.Evm.Tracing.GethStyle;
-using Nethermind.Evm.Tracing.ParityStyle;
+using Nethermind.Blockchain.Tracing.GethStyle;
+using Nethermind.Blockchain.Tracing.ParityStyle;
 using Nethermind.Int256;
 using Nethermind.Logging;
 using Nethermind.State;
@@ -38,7 +39,7 @@ public sealed class BlockchainProcessor : IBlockchainProcessor, IBlockProcessing
 
     public ITracerBag Tracers => _compositeBlockTracer;
 
-    private readonly IBlockProcessor _blockProcessor;
+    private readonly IBranchProcessor _branchProcessor;
     private readonly IBlockPreprocessorStep _recoveryStep;
     private readonly IStateReader _stateReader;
     private readonly Options _options;
@@ -77,34 +78,39 @@ public sealed class BlockchainProcessor : IBlockchainProcessor, IBlockProcessing
     private readonly Stopwatch _stopwatch = new();
 
     public event EventHandler<IBlockchainProcessor.InvalidBlockEventArgs>? InvalidBlock;
+    public event EventHandler<BlockStatistics>? NewProcessingStatistics;
 
     /// <summary>
     ///
     /// </summary>
     /// <param name="blockTree"></param>
-    /// <param name="blockProcessor"></param>
+    /// <param name="branchProcessor"></param>
     /// <param name="recoveryStep"></param>
     /// <param name="stateReader"></param>
     /// <param name="logManager"></param>
     /// <param name="options"></param>
     public BlockchainProcessor(
-        IBlockTree? blockTree,
-        IBlockProcessor? blockProcessor,
-        IBlockPreprocessorStep? recoveryStep,
+        IBlockTree blockTree,
+        IBranchProcessor branchProcessor,
+        IBlockPreprocessorStep recoveryStep,
         IStateReader stateReader,
-        ILogManager? logManager,
+        ILogManager logManager,
         Options options)
     {
-        _logger = logManager?.GetClassLogger() ?? throw new ArgumentNullException(nameof(logManager));
-        _blockTree = blockTree ?? throw new ArgumentNullException(nameof(blockTree));
-        _blockProcessor = blockProcessor ?? throw new ArgumentNullException(nameof(blockProcessor));
-        _recoveryStep = recoveryStep ?? throw new ArgumentNullException(nameof(recoveryStep));
-        _stateReader = stateReader ?? throw new ArgumentNullException(nameof(stateReader));
+        _logger = logManager.GetClassLogger();
+        _blockTree = blockTree;
+        _branchProcessor = branchProcessor;
+        _recoveryStep = recoveryStep;
+        _stateReader = stateReader;
         _options = options;
 
-        _stats = new ProcessingStats(stateReader, _logger);
+        _stats = new ProcessingStats(stateReader, logManager.GetClassLogger<ProcessingStats>());
         _loopCancellationSource = new CancellationTokenSource();
+        _stats.NewProcessingStatistics += OnNewProcessingStatistics;
     }
+
+    private void OnNewProcessingStatistics(object? sender, BlockStatistics stats)
+        => NewProcessingStatistics?.Invoke(sender, stats);
 
     private void OnNewHeadBlock(object? sender, BlockEventArgs e)
     {
@@ -479,7 +485,7 @@ public sealed class BlockchainProcessor : IBlockchainProcessor, IBlockProcessing
             int blockQueueCount = _blockQueue.Reader.Count;
             Metrics.RecoveryQueueSize = Math.Max(_queueCount - blockQueueCount - (IsProcessingBlock ? 1 : 0), 0);
             Metrics.ProcessingQueueSize = blockQueueCount;
-            _stats.UpdateStats(lastProcessed, processingBranch.Root, blockProcessingTimeInMicrosecs);
+            _stats.UpdateStats(lastProcessed, processingBranch.BaseBlock, blockProcessingTimeInMicrosecs);
         }
 
         bool updateHead = !options.ContainsFlag(ProcessingOptions.DoNotUpdateHead);
@@ -514,8 +520,8 @@ public sealed class BlockchainProcessor : IBlockchainProcessor, IBlockProcessing
         {
             try
             {
-                _blockProcessor.Process(
-                    processingBranch.Root,
+                _branchProcessor.Process(
+                    processingBranch.BaseBlock,
                     processingBranch.BlocksToProcess,
                     options,
                     blockTracer);
@@ -527,7 +533,7 @@ public sealed class BlockchainProcessor : IBlockchainProcessor, IBlockProcessing
             }
             catch (Exception ex)
             {
-                BlockTraceDumper.LogTraceFailure(blockTracer, processingBranch.Root, ex, _logger);
+                BlockTraceDumper.LogTraceFailure(blockTracer, processingBranch.BaseBlock, ex, _logger);
             }
         }
     }
@@ -550,8 +556,8 @@ public sealed class BlockchainProcessor : IBlockchainProcessor, IBlockProcessing
         Block[]? processedBlocks;
         try
         {
-            processedBlocks = _blockProcessor.Process(
-                processingBranch.Root,
+            processedBlocks = _branchProcessor.Process(
+                processingBranch.BaseBlock,
                 processingBranch.BlocksToProcess,
                 options,
                 tracer,
@@ -654,7 +660,7 @@ public sealed class BlockchainProcessor : IBlockchainProcessor, IBlockProcessing
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         void TraceProcessingBlocks(ProcessingBranch processingBranch, ArrayPoolList<Block> blocksToProcess)
-            => _logger.Trace($"Processing {blocksToProcess.Count} blocks from state root {processingBranch.Root}");
+            => _logger.Trace($"Processing {blocksToProcess.Count} blocks from state root {processingBranch.BaseBlock}");
 
         [DoesNotReturn, StackTraceHidden]
         static void ThrowOrphanedBlock(Block firstBlock)
@@ -724,7 +730,7 @@ public sealed class BlockchainProcessor : IBlockchainProcessor, IBlockProcessing
             // otherwise some nodes would be missing
             // we also need to go deeper if we already pruned state for that block
             bool notFoundTheBranchingPointYet = !_blockTree.IsMainChain(branchingPoint.Hash!);
-            bool hasState = toBeProcessed?.StateRoot is null || _stateReader.HasStateForBlock(toBeProcessed.Header);
+            bool hasState = toBeProcessed?.StateRoot is null || _stateReader.HasStateForBlock(toBeProcessed.Header!);
             bool notInForceProcessing = !options.ContainsFlag(ProcessingOptions.ForceProcessing);
             branchingCondition =
                 (notFoundTheBranchingPointYet || !hasState)
@@ -745,7 +751,7 @@ public sealed class BlockchainProcessor : IBlockchainProcessor, IBlockProcessing
         if (blocksToBeAddedToMain.Count > 1)
             blocksToBeAddedToMain.Reverse();
 
-        return new ProcessingBranch(stateRoot, blocksToBeAddedToMain);
+        return new ProcessingBranch(branchingPoint, blocksToBeAddedToMain);
 
         // Uncommon logging and throws
 
@@ -864,13 +870,16 @@ public sealed class BlockchainProcessor : IBlockchainProcessor, IBlockProcessing
 
     public async ValueTask DisposeAsync()
     {
+        _stats.NewProcessingStatistics -= OnNewProcessingStatistics;
+        _blockTree.NewBestSuggestedBlock -= OnNewBestBlock;
+        _blockTree.NewHeadBlock -= OnNewHeadBlock;
         await StopAsync(processRemainingBlocks: false);
     }
 
     [DebuggerDisplay("Root: {Root}, Length: {BlocksToProcess.Count}")]
-    private readonly ref struct ProcessingBranch(Hash256 root, ArrayPoolList<Block> blocks)
+    private readonly ref struct ProcessingBranch(BlockHeader? baseBlock, ArrayPoolList<Block> blocks)
     {
-        public Hash256 Root { get; } = root;
+        public BlockHeader? BaseBlock { get; } = baseBlock;
         public ArrayPoolList<Block> Blocks { get; } = blocks;
         public ArrayPoolList<Block> BlocksToProcess { get; } = new(blocks.Count);
 

@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
 using Nethermind.Blockchain;
+using Nethermind.Blockchain.Tracing;
 using Nethermind.Core;
 using Nethermind.Core.Specs;
 using Nethermind.Evm;
@@ -23,7 +24,7 @@ namespace Nethermind.Consensus.Processing
         public class BlockValidationTransactionsExecutor(
             ITransactionProcessorAdapter transactionProcessor,
             IWorldState stateProvider)
-            : IValidationTransactionExecutor
+            : IBlockProcessor.IBlockTransactionsExecutor
         {
             public event EventHandler<TxProcessedEventArgs>? TransactionProcessed;
 

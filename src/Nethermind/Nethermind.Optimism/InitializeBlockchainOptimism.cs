@@ -27,8 +27,6 @@ namespace Nethermind.Optimism;
 
 public class InitializeBlockchainOptimism(OptimismNethermindApi api) : InitializeBlockchain(api)
 {
-    private readonly IBlocksConfig _blocksConfig = api.Config<IBlocksConfig>();
-
     protected override async Task InitBlockchain()
     {
         await base.InitBlockchain();
@@ -58,13 +56,17 @@ public class InitializeBlockchainOptimism(OptimismNethermindApi api) : Initializ
 
     protected override BlockProcessor CreateBlockProcessor(BlockCachePreWarmer? preWarmer, ITransactionProcessor transactionProcessor, IWorldState worldState)
     {
-        if (api.DbProvider is null) throw new StepDependencyException(nameof(api.DbProvider));
         if (api.RewardCalculatorSource is null) throw new StepDependencyException(nameof(api.RewardCalculatorSource));
         if (api.SpecHelper is null) throw new StepDependencyException(nameof(api.SpecHelper));
         if (api.SpecProvider is null) throw new StepDependencyException(nameof(api.SpecProvider));
         if (api.BlockTree is null) throw new StepDependencyException(nameof(api.BlockTree));
 
         Create2DeployerContractRewriter contractRewriter = new(api.SpecHelper, api.SpecProvider, api.BlockTree);
+
+        var withdrawalProcessor = new OptimismWithdrawalProcessor(api.WorldStateManager!.GlobalWorldState, api.LogManager, api.SpecHelper);
+        var genesisPostProcessor = new OptimismGenesisPostProcessor(withdrawalProcessor, api.SpecProvider);
+
+        api.GenesisPostProcessor = genesisPostProcessor;
 
         return new OptimismBlockProcessor(
             api.SpecProvider,
@@ -78,9 +80,8 @@ public class InitializeBlockchainOptimism(OptimismNethermindApi api) : Initializ
             api.LogManager,
             api.SpecHelper,
             contractRewriter,
-            new OptimismWithdrawalProcessor(api.WorldStateManager!.GlobalWorldState, api.LogManager, api.SpecHelper),
-            new ExecutionRequestsProcessor(transactionProcessor),
-            preWarmer: preWarmer);
+            withdrawalProcessor,
+            new ExecutionRequestsProcessor(transactionProcessor));
     }
 
     protected override IBlockProductionPolicy CreateBlockProductionPolicy() => AlwaysStartBlockProductionPolicy.Instance;

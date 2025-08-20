@@ -28,6 +28,7 @@ using Nethermind.Trie;
 using Nethermind.Trie.Pruning;
 using NSubstitute;
 using NUnit.Framework;
+using Nethermind.History;
 
 namespace Nethermind.Synchronization.Test.Trie;
 
@@ -128,7 +129,7 @@ public class HealingTreeTests
         await using IContainer client = CreateNode();
 
         // Add some data to the server.
-        Hash256 stateRoot = FillStorage(server);
+        BlockHeader baseBlock = FillStorage(server);
 
         RandomCopyState(server, client);
 
@@ -146,15 +147,17 @@ public class HealingTreeTests
             configProvider.GetConfig<IInitConfig>().StateDbKeyScheme = keyScheme;
             return new ContainerBuilder()
                 .AddModule(new TestNethermindModule(configProvider))
+                .AddSingleton<IHistoryPruner>(Substitute.For<IHistoryPruner>())
                 .AddSingleton<IBlockTree>(Build.A.BlockTree().OfChainLength(1).TestObject)
                 .Build();
         }
 
-        Hash256 FillStorage(IContainer server)
+        BlockHeader FillStorage(IContainer server)
         {
-            IWorldState mainWorldState = server.Resolve<MainBlockProcessingContext>().WorldState;
+            IWorldState mainWorldState = server.Resolve<AutoMainProcessingContext>().WorldState;
             IBlockTree blockTree = server.Resolve<IBlockTree>();
-            mainWorldState.StateRoot = Keccak.EmptyTreeHash;
+
+            using var _ = mainWorldState.BeginScope(blockTree.Head?.Header);
 
             for (int i = 0; i < 100; i++)
             {
@@ -170,15 +173,17 @@ public class HealingTreeTests
             }
 
             mainWorldState.Commit(Cancun.Instance);
-            mainWorldState.CommitTree(1);
 
             // Snap server check for the past 128 block in blocktree explicitly to pass hive test.
             // So need to simulate block processing..
+            mainWorldState.CommitTree((blockTree.Head?.Number ?? 0) + 1);
+
             Block block = Build.A.Block.WithStateRoot(mainWorldState.StateRoot).WithParent(blockTree.Head!).TestObject;
+
             blockTree.SuggestBlock(block).Should().Be(AddBlockResult.Added);
             blockTree.UpdateMainChain([block], true);
 
-            return mainWorldState.StateRoot;
+            return block.Header;
         }
 
         void RandomCopyState(IContainer server, IContainer client)
@@ -203,8 +208,8 @@ public class HealingTreeTests
 
         void AssertStorage(IContainer client)
         {
-            IWorldState mainWorldState = client.Resolve<MainBlockProcessingContext>().WorldState;
-            mainWorldState.StateRoot = stateRoot;
+            IWorldState mainWorldState = client.Resolve<AutoMainProcessingContext>().WorldState;
+            using var _ = mainWorldState.BeginScope(baseBlock);
 
             for (int i = 0; i < 100; i++)
             {

@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using System.Timers;
 using Nethermind.Blockchain;
 using Nethermind.Blockchain.Find;
+using Nethermind.Blockchain.Tracing;
 using Nethermind.Consensus.Processing;
 using Nethermind.Consensus.Producers;
 using Nethermind.Consensus.Transactions;
@@ -488,8 +489,6 @@ public class CliqueBlockProducer : IBlockProducer
         // Mix digest is reserved for now, set to empty
         header.MixHash = Keccak.Zero;
         header.WithdrawalsRoot = spec.WithdrawalsEnabled ? Keccak.EmptyTreeHash : null;
-
-        _stateProvider.StateRoot = parentHeader.StateRoot!;
 
         IEnumerable<Transaction> selectedTxs = _txSource.GetTransactions(parentHeader, header.GasLimit, null, filterSource: true);
         Block block = new BlockToProduce(

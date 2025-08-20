@@ -6,6 +6,7 @@ using System.Threading;
 using Autofac.Features.AttributeFilters;
 using Nethermind.Core;
 using Nethermind.Core.Crypto;
+using Nethermind.Core.Extensions;
 using Nethermind.Db;
 using Nethermind.Evm.State;
 using Nethermind.Logging;
@@ -44,7 +45,7 @@ public class BlockingVerifyTrie
     public bool VerifyTrie(BlockHeader stateAtBlock, CancellationToken cancellationToken)
     {
         // This is to block processing as with halfpath old nodes will be removed
-        using IBlockCommitter? _ = _trieStore.BeginBlockCommit(stateAtBlock.Number + 1);
+        using IDisposable _ = _trieStore.BeginScope(stateAtBlock);
 
         Hash256 rootNode = stateAtBlock.StateRoot;
         TrieStats stats = _stateReader.CollectStats(rootNode, _codeDb, _logManager, cancellationToken);

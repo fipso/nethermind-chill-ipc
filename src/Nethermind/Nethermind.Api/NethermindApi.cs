@@ -4,7 +4,6 @@
 using System.Collections.Generic;
 using System.IO.Abstractions;
 using Autofac;
-using Nethermind.Abi;
 using Nethermind.Api.Extensions;
 using Nethermind.Blockchain;
 using Nethermind.Blockchain.Blocks;
@@ -42,15 +41,12 @@ using Nethermind.TxPool;
 using Nethermind.Wallet;
 using Nethermind.Consensus.Processing.CensorshipDetector;
 using Nethermind.Facade.Find;
+using Nethermind.History;
 
 namespace Nethermind.Api
 {
-    public class NethermindApi : INethermindApi
+    public class NethermindApi(NethermindApi.Dependencies dependencies) : INethermindApi
     {
-        public NethermindApi(Dependencies dependencies)
-        {
-            _dependencies = dependencies;
-        }
 
         // A simple class to prevent having to modify subclass of NethermindApi many time
         public record Dependencies(
@@ -64,16 +60,16 @@ namespace Nethermind.Api
             ILifetimeScope Context
         );
 
-        private Dependencies _dependencies;
+        private Dependencies _dependencies = dependencies;
 
         public IBlockchainBridge CreateBlockchainBridge()
         {
             return Context.Resolve<IBlockchainBridgeFactory>().CreateBlockchainBridge();
         }
 
-        public IAbiEncoder AbiEncoder => Context.Resolve<IAbiEncoder>();
-        public IBlobTxStorage? BlobTxStorage { get; set; }
+        public IBlobTxStorage BlobTxStorage => Context.Resolve<IBlobTxStorage>();
         public CompositeBlockPreprocessorStep BlockPreprocessor { get; } = new();
+        public IGenesisPostProcessor GenesisPostProcessor { get; set; } = new NullGenesisPostProcessor();
         public IBlockProcessingQueue? BlockProcessingQueue { get; set; }
         public IBlockProducer? BlockProducer { get; set; }
         public IBlockProducerRunner BlockProducerRunner { get; set; } = new NoBlockProducerRunner();
@@ -83,15 +79,13 @@ namespace Nethermind.Api
         public IChainLevelInfoRepository? ChainLevelInfoRepository { get; set; }
         public IConfigProvider ConfigProvider => _dependencies.ConfigProvider;
         public ICryptoRandom CryptoRandom => Context.Resolve<ICryptoRandom>();
-        public IDbProvider? DbProvider { get; set; }
-        public IDbFactory? DbFactory { get; set; }
+        public IDbProvider DbProvider => Context.Resolve<IDbProvider>();
         public ISigner? EngineSigner { get; set; }
         public ISignerStore? EngineSignerStore { get; set; }
         public IEnode? Enode { get; set; }
         public IEthereumEcdsa EthereumEcdsa => Context.Resolve<IEthereumEcdsa>();
         public IFileSystem FileSystem { get; set; } = new FileSystem();
-        public IUnclesValidator? UnclesValidator => Context.Resolve<IUnclesValidator>();
-        public IHeaderValidator? HeaderValidator => Context.Resolve<IHeaderValidator>();
+        public IHistoryPruner? HistoryPruner => Context.Resolve<IHistoryPruner>();
         public IEngineRequestsTracker EngineRequestsTracker => Context.Resolve<IEngineRequestsTracker>();
 
         public IManualBlockProductionTrigger ManualBlockProductionTrigger { get; set; } =
@@ -135,15 +129,15 @@ namespace Nethermind.Api
         public ITxSender? TxSender { get; set; }
         public INonceManager? NonceManager { get; set; }
         public ITxPool? TxPool { get; set; }
-        public IRpcCapabilitiesProvider? RpcCapabilitiesProvider { get; set; }
         public TxValidator? TxValidator => Context.Resolve<TxValidator>();
+        public ITxValidator? HeadTxValidator => Context.ResolveOptionalKeyed<ITxValidator>(ITxValidator.HeadTxValidatorKey);
         public IBlockFinalizationManager? FinalizationManager { get; set; }
 
         public IBlockProducerEnvFactory BlockProducerEnvFactory => Context.Resolve<IBlockProducerEnvFactory>();
         public IGasPriceOracle GasPriceOracle => Context.Resolve<IGasPriceOracle>();
         public IBlockProductionPolicy? BlockProductionPolicy { get; set; }
-        public BackgroundTaskScheduler BackgroundTaskScheduler { get; set; } = null!;
-        public CensorshipDetector CensorshipDetector { get; set; } = null!;
+        public IBackgroundTaskScheduler BackgroundTaskScheduler { get; set; } = null!;
+        public ICensorshipDetector CensorshipDetector { get; set; } = new NoopCensorshipDetector();
         public IWallet? Wallet { get; set; }
         public IBadBlockStore? BadBlocksStore { get; set; }
         public ITransactionComparerProvider? TransactionComparerProvider { get; set; }

@@ -19,7 +19,6 @@ using Nethermind.Trie;
 using Nethermind.TxPool;
 using Block = Nethermind.Core.Block;
 using System.Threading;
-using Nethermind.Consensus.Processing;
 using Nethermind.Core.Specs;
 using Nethermind.Evm.TransactionProcessing;
 using Nethermind.Facade.Filters;
@@ -30,6 +29,7 @@ using Nethermind.Facade.Proxy.Models.Simulate;
 using Nethermind.Facade.Simulate;
 using Transaction = Nethermind.Core.Transaction;
 using Autofac;
+using Nethermind.Blockchain.Tracing;
 using Nethermind.Consensus;
 using Nethermind.Evm.State;
 using Nethermind.State.OverridableEnv;
@@ -39,7 +39,7 @@ namespace Nethermind.Facade
     [Todo(Improve.Refactor, "I want to remove BlockchainBridge, split it into something with logging, state and tx processing. Then we can start using independent modules.")]
     public class BlockchainBridge(
         IOverridableEnv<BlockchainBridge.BlockProcessingComponents> processingEnv,
-        SimulateReadOnlyBlocksProcessingEnvFactory simulateProcessingEnvFactory,
+        Lazy<ISimulateReadOnlyBlocksProcessingEnv> lazySimulateProcessingEnv,
         IBlockTree blockTree,
         IStateReader stateReader,
         ITxPool txPool,
@@ -80,9 +80,13 @@ namespace Nethermind.Facade
                 if (block is not null)
                 {
                     receipts = receiptStorage.Get(block);
-                    receipt = receipts.ForTransaction(txHash);
-                    transaction = block.Transactions[receipt.Index];
-                    return true;
+                    int txIndex = block.GetTransactionIndex(txHash.ValueHash256);
+                    if (txIndex != -1)
+                    {
+                        transaction = block.Transactions[txIndex];
+                        receipt = receipts.Length > txIndex && receipts[txIndex].TxHash == txHash ? receipts[txIndex] : null;
+                        return true;
+                    }
                 }
             }
 
@@ -135,11 +139,12 @@ namespace Nethermind.Facade
             };
         }
 
-        public SimulateOutput<TTrace> Simulate<TTrace>(BlockHeader header, SimulatePayload<TransactionWithSourceDetails> payload, ISimulateBlockTracerFactory<TTrace> simulateBlockTracerFactory, CancellationToken cancellationToken)
+        public SimulateOutput<TTrace> Simulate<TTrace>(BlockHeader header, SimulatePayload<TransactionWithSourceDetails> payload, ISimulateBlockTracerFactory<TTrace> simulateBlockTracerFactory, long gasCapLimit, CancellationToken cancellationToken)
         {
-            using SimulateReadOnlyBlocksProcessingEnv env = simulateProcessingEnvFactory.Create();
+            using SimulateReadOnlyBlocksProcessingScope env = lazySimulateProcessingEnv.Value.Begin(header);
+            env.SimulateRequestState.Validate = payload.Validation;
             IBlockTracer<TTrace> tracer = simulateBlockTracerFactory.CreateSimulateBlockTracer(payload.TraceTransfers, env.WorldState, specProvider, header);
-            return _simulateBridgeHelper.TrySimulate(header, payload, tracer, env, cancellationToken);
+            return _simulateBridgeHelper.TrySimulate(header, payload, tracer, env, gasCapLimit, cancellationToken);
         }
 
         public CallOutput EstimateGas(BlockHeader header, Transaction tx, int errorMargin, Dictionary<Address, AccountOverride>? stateOverride, CancellationToken cancellationToken)
@@ -173,12 +178,12 @@ namespace Nethermind.Facade
         {
             AccessTxTracer accessTxTracer = optimize
                 ? new(tx.SenderAddress,
-                    tx.GetRecipient(tx.IsContractCreation ? stateReader.GetNonce(header.StateRoot, tx.SenderAddress) : 0), header.GasBeneficiary)
+                    tx.GetRecipient(tx.IsContractCreation ? stateReader.GetNonce(header, tx.SenderAddress) : 0), header.GasBeneficiary)
                 : new(header.GasBeneficiary);
 
             CallOutputTracer callOutputTracer = new();
 
-            using var scope = processingEnv.Build(header.StateRoot!);
+            using var scope = processingEnv.BuildAndOverride(header);
             var components = scope.Component;
 
             TransactionResult tryCallResult = TryCallAndRestore(components, header, tx, false,
@@ -220,10 +225,9 @@ namespace Nethermind.Facade
             BlockProcessingComponents components)
         {
             transaction.SenderAddress ??= Address.SystemUser;
-            Hash256 stateRoot = blockHeader.StateRoot!;
 
             //Ignore nonce on all CallAndRestore calls
-            transaction.Nonce = components.StateReader.GetNonce(stateRoot, transaction.SenderAddress);
+            transaction.Nonce = components.StateReader.GetNonce(blockHeader, transaction.SenderAddress);
 
             BlockHeader callHeader = treatBlockHeaderAsParentBlock
                 ? new(
@@ -374,9 +378,9 @@ namespace Nethermind.Facade
             stateReader.RunTreeVisitor(treeVisitor, stateRoot);
         }
 
-        public bool HasStateForRoot(Hash256 stateRoot)
+        public bool HasStateForBlock(BlockHeader baseBlock)
         {
-            return stateReader.HasStateForRoot(stateRoot);
+            return stateReader.HasStateForBlock(baseBlock);
         }
 
         public IEnumerable<FilterLog> FindLogs(LogFilter filter, BlockHeader fromBlock, BlockHeader toBlock, CancellationToken cancellationToken = default)
@@ -414,6 +418,7 @@ namespace Nethermind.Facade
     }
 
     public class BlockchainBridgeFactory(
+        ISimulateReadOnlyBlocksProcessingEnvFactory simulateEnvFactory,
         IOverridableEnvFactory envFactory,
         ILifetimeScope rootLifetimeScope
     ) : IBlockchainBridgeFactory
@@ -432,6 +437,7 @@ namespace Nethermind.Facade
 
             ILifetimeScope blockchainBridgeLifetime = rootLifetimeScope.BeginLifetimeScope((builder) => builder
                 .AddScoped<BlockchainBridge>()
+                .AddScoped<ISimulateReadOnlyBlocksProcessingEnv>((_) => simulateEnvFactory.Create())
                 .AddScoped(blockProcessingEnv));
 
             blockchainBridgeLifetime.Disposer.AddInstanceForAsyncDisposal(overridableScopeLifetime);

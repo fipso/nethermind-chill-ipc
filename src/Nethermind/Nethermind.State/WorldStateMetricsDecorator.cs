@@ -51,11 +51,7 @@ public class WorldStateMetricsDecorator(IWorldState innerState) : IWorldState
         StateMerkleizationTime += Stopwatch.GetElapsedTime(start).TotalMilliseconds;
     }
 
-    public Hash256 StateRoot
-    {
-        get => innerState.StateRoot;
-        set => innerState.StateRoot = value;
-    }
+    public Hash256 StateRoot => innerState.StateRoot;
 
     public double StateMerkleizationTime { get; private set; }
 
@@ -124,9 +120,10 @@ public class WorldStateMetricsDecorator(IWorldState innerState) : IWorldState
 
     public bool IsDeadAccount(Address address) => innerState.IsDeadAccount(address);
 
-    public bool IsEmptyAccount(Address address) => innerState.IsEmptyAccount(address);
+    public bool HasStateForBlock(BlockHeader? stateRoot) => innerState.HasStateForBlock(stateRoot);
 
-    public bool HasStateForRoot(Hash256 stateRoot) => innerState.HasStateForRoot(stateRoot);
+    public IDisposable BeginScope(BlockHeader? baseBlock) => innerState.BeginScope(baseBlock);
+    public bool IsInScope => innerState.IsInScope;
 
     public ref readonly UInt256 GetBalance(Address account) => ref innerState.GetBalance(account);
 
