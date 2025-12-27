@@ -45,17 +45,22 @@ public class TxPoolContentListsTests
         Block block = Build.A.Block.WithHeader(Build.A.BlockHeader.WithGasLimit((long)blockGasLimit).TestObject).TestObject;
         blockFinder.Head.Returns(block);
 
+        BlockExecutionContext? currentContext = null;
         ITransactionProcessor transactionProcessor = Substitute.For<ITransactionProcessor>();
-        transactionProcessor.When(static (x) => x.Execute(Arg.Any<Transaction>(), Arg.Any<BlockExecutionContext>(), Arg.Any<ITxTracer>()))
-            .Do(static info => ((BlockExecutionContext)info[1]).Header.GasUsed += Transaction.BaseTxGasCost);
-
-        transactionProcessor.Execute(Arg.Any<Transaction>(), Arg.Any<BlockExecutionContext>(), Arg.Any<ITxTracer>())
-            .Returns(static info =>
+        transactionProcessor.When(static (x) => x.SetBlockExecutionContext(Arg.Any<BlockExecutionContext>()))
+            .Do(info =>
             {
-                if (((BlockExecutionContext)info[1]).Header.GasUsed <= ((BlockExecutionContext)info[1]).Header.GasLimit)
+                currentContext = ((BlockExecutionContext)info[0]);
+                currentContext.Value.Header.GasUsed += Transaction.BaseTxGasCost;
+            });
+
+        transactionProcessor.Execute(Arg.Any<Transaction>(), Arg.Any<ITxTracer>())
+            .Returns(info =>
+            {
+                if (currentContext!.Value.Header.GasUsed <= currentContext.Value.Header.GasLimit)
                     return TransactionResult.Ok;
 
-                ((BlockExecutionContext)info[1]).Header.GasUsed -= Transaction.BaseTxGasCost;
+                currentContext.Value.Header.GasUsed -= Transaction.BaseTxGasCost;
                 return TransactionResult.BlockGasLimitExceeded;
             });
 
@@ -78,7 +83,7 @@ public class TxPoolContentListsTests
             Substitute.For<IHandler<TransitionConfigurationV1, TransitionConfigurationV1>>(),
             Substitute.For<IHandler<IEnumerable<string>, IEnumerable<string>>>(),
             Substitute.For<IAsyncHandler<byte[][], IEnumerable<BlobAndProofV1?>>>(),
-            Substitute.For<IAsyncHandler<byte[][], IEnumerable<BlobAndProofV2>?>>(),
+            Substitute.For<IAsyncHandler<GetBlobsHandlerV2Request, IEnumerable<BlobAndProofV2?>?>>(),
             Substitute.For<IEngineRequestsTracker>(),
             Substitute.For<ISpecProvider>(),
             null!,
