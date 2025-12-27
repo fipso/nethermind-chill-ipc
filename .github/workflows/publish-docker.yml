@@ -51,10 +51,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push image to ghcr.io
         run: |
           branch=$(echo "${{ github.ref }}" | sed -e "s/refs\/heads\///g")
-          image_name=nethermindeth/${{ github.event.inputs.image-name || 'nethermind' }}
+          image_name=ghcr.io/${{ github.repository_owner }}/${{ github.event.inputs.image-name || 'nethermind' }}
+
           tag=$(echo "${{ github.event.inputs.tag || '$branch' }}" | sed 's/\//-/g') # replace '/' with '-'
 
           echo "Building image with tag $tag"
